@@ -58,7 +58,7 @@ void loop() {
 
   //HTTP
   if (WiFi.status() == WL_CONNECTED) {
-     HTTPClient http;
+     HTTPClient httpSend;
       int valor = random(30, 80);  // Valor simulado (puedes reemplazarlo por la lectura real)
     Serial.print("Enviando valor: ");
     Serial.println(valor);
@@ -70,8 +70,8 @@ void loop() {
                   "&field3=" + String(t);
 
     // Inicializar solicitud HTTP
-    http.begin(url); // ← Usamos la URL completa para enviar datos por GET
-    int httpResponseCode = http.GET(); // ← Ejecuta la solicitud GET
+    httpSend.begin(url); // ← Usamos la URL completa para enviar datos por GET
+    int httpResponseCode = httpSend.GET(); // ← Ejecuta la solicitud GET
 
     // Revisar la respuesta
     if (httpResponseCode > 0) {
@@ -81,16 +81,40 @@ void loop() {
       Serial.print("Error al enviar datos. Código: ");
       Serial.println(httpResponseCode);
     }
+    httpSend.end();
 
-    http.end(); // Liberar recursos
+    HTTPClient httpRead;
+    String readUrl= "https://api.thingspeak.com/channels/"+ String(CHANNEL_ID) + 
+                    "/fields/4/last.txt?api_key="+ String(READ_API_KEY);
+    httpRead.begin(readUrl);
+    int httpCode = httpRead.GET();
+
+    if (httpCode == 200) {
+      String payload = httpRead.getString();
+      int comando = payload.toInt();
+      Serial.println("Valor recibido desde ThingSpeak (field4): " + String(comando));
+
+      if (comando == 1) {
+        digitalWrite(ledPin, HIGH); // Enciende el LED
+      } else {
+        digitalWrite(ledPin, LOW);  // Apaga el LED
+      }
+    } else {
+      Serial.print("Error al obtener el valor. Código HTTP: ");
+      Serial.println(httpCode);
+    }
+
+    httpRead.end(); // Liberar recursos
+
   } else {
     Serial.println("WiFi no conectado. Intentando reconectar...");
     WiFi.begin(WIFI_SSID, WIFI_PASS);
   }
 
+  
+
   delay(15000); // Esperar 15 segundos para cumplir con los límites de ThingSpeak
 }
-
 
 /*
 void setup() {
