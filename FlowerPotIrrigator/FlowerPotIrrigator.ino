@@ -4,7 +4,7 @@
 #include "mqtt_secrets.h"
 #include "DHT.h"
 
-#define DHTPIN 27       // Cambia por el pin que estás usando
+#define DHTPIN 27       // Pin donde está el DHT22
 #define DHTTYPE DHT22   // Tipo de sensor
 
 DHT dht(DHTPIN, DHTTYPE);
@@ -59,10 +59,6 @@ void loop() {
   //HTTP
   if (WiFi.status() == WL_CONNECTED) {
      HTTPClient httpSend;
-      int valor = random(30, 80);  // Valor simulado (puedes reemplazarlo por la lectura real)
-    Serial.print("Enviando valor: ");
-    Serial.println(valor);
-
     // Construir la URL de publicación
     String url = "http://api.thingspeak.com/update?api_key=" + String(WRITE_API_KEY) + 
                   "&field1=" + String(valHumsuelo) +
@@ -111,53 +107,5 @@ void loop() {
     WiFi.begin(WIFI_SSID, WIFI_PASS);
   }
 
-  
-
   delay(15000); // Esperar 15 segundos para cumplir con los límites de ThingSpeak
 }
-
-/*
-void setup() {
-  Serial.begin(115200);
-  pinMode(humsuelo, INPUT);
-  pinMode(ledPin, OUTPUT);
-  dht.begin();
-  Serial.println("Iniciando sensor DHT22...");
-}
-
-void loop() {
-  //FC28
-  valHumsuelo = map(analogRead(humsuelo), 4092, 0, 0, 100);
-
-  Serial.print("Humedad del suelo: ");
-  Serial.print(valHumsuelo);
-  Serial.println(" %");
-
-  //DHT22
-  float h = dht.readHumidity();
-  float t = dht.readTemperature(); // Celsius
-
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Error al leer del sensor DHT22");
-    return;
-  }
-
-  Serial.print("Humedad del aire: ");
-  Serial.print(h);
-  Serial.println(" %");
-
-  Serial.print("Temperatura: ");
-  Serial.print(t);
-  Serial.println(" °C");
-
-  // Umbral: Si la humedad es menor a 30%, encender LED
-  if (valHumsuelo < 30) {
-    digitalWrite(ledPin, HIGH);  // Encender LED
-  } else {
-    digitalWrite(ledPin, LOW);   // Apagar LED
-  }
-  
-  delay(2000); // Lee cada 2 segundos
-  
-}
-*/
