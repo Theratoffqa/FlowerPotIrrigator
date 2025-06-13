@@ -1,2 +1,5 @@
 leer_FC28
 prender_LED
+libraries
+FlowerPotIrrigator/mqtt_secrets.h
+FlowerPotIrrigator/secrets.h
