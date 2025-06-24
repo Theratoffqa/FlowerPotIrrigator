@@ -1,26 +1,25 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include "secrets.h"
-#include "mqtt_secrets.h"
 #include "DHT.h"
+#include "secrets.h"              // Aquí defines WIFI_SSID, WIFI_PASS, WRITE_API_KEY
+#include "decision_tree_model.h"  // Modelo exportado con micromlgen
 
-#define DHTPIN 27       // Pin donde está el DHT22
-#define DHTTYPE DHT22   // Tipo de sensor
-
+#define DHTPIN 27                 // Pin donde está conectado el DHT22
+#define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-const int humsuelo = 33; // Pin ADC conectado a A0 del HW-080
-const int ledPin = 14;       // Pin donde está el LED
-int valHumsuelo;
+const int humsueloPin = 33;       // Pin analógico conectado al sensor FC-28
+const int ledPin = 14;            // Pin donde está conectado el LED (o relay)
+
+Eloquent::ML::Port::DecisionTree modelo;
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  
-  pinMode(humsuelo, INPUT);
+
+  pinMode(humsueloPin, INPUT);
   pinMode(ledPin, OUTPUT);
   dht.begin();
-  Serial.println("Iniciando sensor DHT22...");
 
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Conectando a WiFi");
@@ -28,84 +27,63 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nConectado al WiFi.");
+  Serial.println("\n✓ Conectado al WiFi");
 }
 
 void loop() {
-  //FC28
-  valHumsuelo = map(analogRead(humsuelo), 4092, 0, 0, 100);
+  // Lectura de sensores reales
+  int rawHumsuelo = analogRead(humsueloPin);
+  float humedadSuelo = map(rawHumsuelo, 4095, 0, 0, 100); // Convertir lectura a %
+  float temperatura = dht.readTemperature();
+  float humedadAire = dht.readHumidity();
 
-  Serial.print("Humedad del suelo: ");
-  Serial.print(valHumsuelo);
-  Serial.println(" %");
-
-  //DHT22
-  float h = dht.readHumidity();
-  float t = dht.readTemperature(); // Celsius
-
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Error al leer del sensor DHT22");
+  // Validar lectura del DHT22
+  if (isnan(temperatura) || isnan(humedadAire)) {
+    Serial.println("✗ Error al leer el sensor DHT22");
+    delay(5000);
     return;
   }
 
-  Serial.print("Humedad del aire: ");
-  Serial.print(h);
-  Serial.println(" %");
+  // Predicción con el modelo
+  float input[] = {humedadSuelo, temperatura, humedadAire};
+  int decision = modelo.predict(input); // 1 = RIEGO, 0 = NO RIEGO
+  if (humedadSuelo < 15) {
+  decision = 1;
+}
 
-  Serial.print("Temperatura: ");
-  Serial.print(t);
-  Serial.println(" °C");
-
-  //HTTP
-  if (WiFi.status() == WL_CONNECTED) {
-     HTTPClient httpSend;
-    // Construir la URL de publicación
-    String url = "http://api.thingspeak.com/update?api_key=" + String(WRITE_API_KEY) + 
-                  "&field1=" + String(valHumsuelo) +
-                  "&field2=" + String(h) +
-                  "&field3=" + String(t);
-
-    // Inicializar solicitud HTTP
-    httpSend.begin(url); // ← Usamos la URL completa para enviar datos por GET
-    int httpResponseCode = httpSend.GET(); // ← Ejecuta la solicitud GET
-
-    // Revisar la respuesta
-    if (httpResponseCode > 0) {
-      Serial.print("Código de respuesta: ");
-      Serial.println(httpResponseCode);
-    } else {
-      Serial.print("Error al enviar datos. Código: ");
-      Serial.println(httpResponseCode);
-    }
-    httpSend.end();
-
-    HTTPClient httpRead;
-    String readUrl= "https://api.thingspeak.com/channels/"+ String(CHANNEL_ID) + 
-                    "/fields/4/last.txt?api_key="+ String(READ_API_KEY);
-    httpRead.begin(readUrl);
-    int httpCode = httpRead.GET();
-
-    if (httpCode == 200) {
-      String payload = httpRead.getString();
-      int comando = payload.toInt();
-      Serial.println("Valor recibido desde ThingSpeak (field4): " + String(comando));
-
-      if (comando == 1) {
-        digitalWrite(ledPin, HIGH); // Enciende el LED
-      } else {
-        digitalWrite(ledPin, LOW);  // Apaga el LED
-      }
-    } else {
-      Serial.print("Error al obtener el valor. Código HTTP: ");
-      Serial.println(httpCode);
-    }
-
-    httpRead.end(); // Liberar recursos
-
+  // Control de LED
+  if (decision == 1) {
+    digitalWrite(ledPin, HIGH);  // 🔴 Activa riego
   } else {
-    Serial.println("WiFi no conectado. Intentando reconectar...");
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    digitalWrite(ledPin, LOW);   // ⚪ No riego
   }
 
-  delay(45000); // Esperar 15 segundos para cumplir con los límites de ThingSpeak
+  // Mostrar en el monitor serie
+  Serial.println("---- SENSOR EN TIEMPO REAL ----");
+  Serial.print("H. suelo: "); Serial.print(humedadSuelo); Serial.print("% | ");
+  Serial.print("Temp: "); Serial.print(temperatura); Serial.print("°C | ");
+  Serial.print("H. aire: "); Serial.print(humedadAire); Serial.print("% → ");
+  Serial.println(decision == 1 ? "RIEGO" : "NO RIEGO");
+
+  // Enviar a ThingSpeak
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "http://api.thingspeak.com/update?api_key=" + String(WRITE_API_KEY) +
+                 "&field1=" + String(humedadSuelo) +
+                 "&field2=" + String(humedadAire) +
+                 "&field3=" + String(temperatura) +
+                 "&field4=" + String(decision);
+    http.begin(url);
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+      Serial.print("✓ Datos enviados (HTTP "); Serial.print(httpCode); Serial.println(")");
+    } else {
+      Serial.print("✗ Error HTTP: "); Serial.println(httpCode);
+    }
+    http.end();
+  } else {
+    Serial.println("✗ WiFi desconectado");
+  }
+
+  delay(20000); // ThingSpeak requiere mínimo 15s entre lecturas
 }
