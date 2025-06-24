@@ -107,5 +107,5 @@ void loop() {
     WiFi.begin(WIFI_SSID, WIFI_PASS);
   }
 
-  delay(15000); // Esperar 15 segundos para cumplir con los límites de ThingSpeak
+  delay(45000); // Esperar 15 segundos para cumplir con los límites de ThingSpeak
 }

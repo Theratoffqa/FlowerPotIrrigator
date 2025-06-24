@@ -3,3 +3,5 @@ prender_LED
 libraries
 FlowerPotIrrigator/mqtt_secrets.h
 FlowerPotIrrigator/secrets.h
+feeds.csv
+prueba_Internet
